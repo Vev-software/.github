@@ -34,7 +34,7 @@ current, so you can plan change with evidence instead of guesswork.
 An open-source, self-hostable gateway and control plane. One stable API to any
 provider or self-hosted model, with routing, cost control, policy, observability
 and audit built in — so AI stays a governed, portable, replaceable part of your
-systems, never an opaque dependency. Apache 2.0.
+systems, never an opaque dependency. AGPL-3.0.
 
 ### How we build
 
