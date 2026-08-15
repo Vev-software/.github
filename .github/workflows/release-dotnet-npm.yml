@@ -103,6 +103,15 @@ jobs:
           npm run build
           npm pack --pack-destination "$GITHUB_WORKSPACE/artifacts"
 
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: artifacts/${{ github.event.repository.name }}-${{ github.ref_name }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
       # Sigstore keyless provenance for every release artifact.
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
