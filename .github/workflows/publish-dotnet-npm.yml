@@ -8,32 +8,44 @@
 #
 # One-time setup per package (all on the REGISTRY, not on GitHub):
 #   nuget.org — Account → Trusted Publishing: repo owner=Vev-software, repo=<name>,
-#     workflow file=publish.yml, environment=release. Set repo variable NUGET_USER.
+#     workflow file=publish.yml, environment=release. Set repo variable NUGET_USER to
+#     the policy CREATOR's personal nuget.org username (NOT the org / package-owner
+#     name — the token exchange resolves by the creator account).
 #   npm — package page → Settings → Trusted Publisher → GitHub Actions:
 #     org=Vev-software, repo=<name>, workflow=publish.yml, environment=release.
 #     A trusted publisher attaches to an EXISTING package, so the very first publish
 #     of a brand-new package needs a one-time manual bootstrap to create it.
 #
-# Caller (in a package repo, .github/workflows/publish.yml):
-#   on:
-#     workflow_dispatch:
-#       inputs:
-#         tag: { type: string, required: true }
-#         publish_nuget: { type: boolean, default: true }
-#         publish_npm: { type: boolean, default: true }
+# ⚠️ nuget + this reusable workflow DO NOT WORK for org-owned packages (upstream bug
+#   NuGet/login#6, https://github.com/NuGet/login/issues/6). When the nuget job runs
+#   inside THIS reusable workflow, the OIDC `job_workflow_ref` claim points at
+#   Vev-software/.github — not the caller — so an org-owned trusted-publishing policy
+#   fails token exchange with HTTP 401 (`No matching trust policy owned by user …`).
+#   Until #6 is fixed, callers must INLINE the nuget publish job in their own
+#   publish.yml (so `job_workflow_ref` = <repo>/publish.yml, matching a per-repo
+#   policy with Repository=<repo>) and use this reusable workflow for NPM ONLY. The
+#   npm job here is unaffected. Copy the `nuget` job steps from below.
+#
+# Caller (in a package repo, .github/workflows/publish.yml) — inline nuget, reuse npm:
 #   jobs:
-#     publish:
+#     nuget:            # INLINED (see #6 above); mirror this file's nuget job steps
+#       if: ${{ inputs.publish_nuget }}
+#       runs-on: ubuntu-latest
+#       environment: release
+#       permissions: { contents: read, id-token: write }
+#       steps: [ checkout (ref=tag, fetch-depth:0), setup-dotnet (global.json),
+#                build+test, pack, NuGet/login@v1 (user: ${{ vars.NUGET_USER }}),
+#                dotnet nuget push --skip-duplicate ]
+#     npm:
+#       if: ${{ inputs.publish_npm }}
 #       uses: Vev-software/.github/.github/workflows/publish-dotnet-npm.yml@main
-#       permissions:
-#         contents: read
-#         id-token: write
+#       permissions: { contents: read, id-token: write }
 #       with:
 #         tag: ${{ inputs.tag }}
-#         solution: AtlasContracts.slnx
-#         dotnet_project: sdk/dotnet/Vev.Atlas.Contracts/Vev.Atlas.Contracts.csproj
 #         ts_dir: sdk/typescript
-#         publish_nuget: ${{ inputs.publish_nuget }}
+#         publish_nuget: false
 #         publish_npm: ${{ inputs.publish_npm }}
+#   Reference implementations: Vev-software/fabric#31, Vev-software/atlas-contracts#25.
 name: publish-dotnet-npm
 
 on:
