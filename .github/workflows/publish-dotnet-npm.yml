@@ -16,36 +16,43 @@
 #     A trusted publisher attaches to an EXISTING package, so the very first publish
 #     of a brand-new package needs a one-time manual bootstrap to create it.
 #
-# ⚠️ nuget + this reusable workflow DO NOT WORK for org-owned packages (upstream bug
-#   NuGet/login#6, https://github.com/NuGet/login/issues/6). When the nuget job runs
-#   inside THIS reusable workflow, the OIDC `job_workflow_ref` claim points at
-#   Vev-software/.github — not the caller — so an org-owned trusted-publishing policy
-#   fails token exchange with HTTP 401 (`No matching trust policy owned by user …`).
-#   Until #6 is fixed, callers must INLINE the nuget publish job in their own
-#   publish.yml (so `job_workflow_ref` = <repo>/publish.yml, matching a per-repo
-#   policy with Repository=<repo>) and use this reusable workflow for NPM ONLY. The
-#   npm job here is unaffected. Copy the `nuget` job steps from below.
+# ⚠️ DELEGATING EITHER JOB via `uses:` DOES NOT WORK for org-owned packages. Trusted
+#   Publishing matches on the OIDC `job_workflow_ref` claim, and when a job runs inside
+#   THIS reusable workflow that claim points at Vev-software/.github — not the caller —
+#   so no per-repo policy matches. This bites BOTH registries:
+#     * nuget — token exchange fails with HTTP 401 (`No matching trust policy owned by
+#       user …`); upstream bug NuGet/login#6, https://github.com/NuGet/login/issues/6.
+#     * npm — same class of failure, observed empirically: the delegated npm publish
+#       returns E404 (npm's "unauthorized" for a scoped package) because the per-repo
+#       npm Trusted Publisher policy is registered as workflow=publish.yml, which the
+#       reusable ref does not match. (An earlier version of this note claimed "npm is
+#       unaffected" — that is WRONG; it fails for the same reason as nuget.)
+#   Therefore callers must INLINE BOTH jobs in their own publish.yml (so
+#   `job_workflow_ref` = <repo>/publish.yml, matching a per-repo policy with
+#   Repository=<repo>). This file is the canonical SOURCE to mirror those steps from,
+#   not a workflow to delegate to. Revert each job to `uses:` once its ref-mismatch
+#   root cause is fixed (nuget: NuGet/login#6; npm: re-register the policy against the
+#   reusable ref).
 #
-# Caller (in a package repo, .github/workflows/publish.yml) — inline nuget, reuse npm:
+# Caller (in a package repo, .github/workflows/publish.yml) — inline BOTH jobs:
 #   jobs:
-#     nuget:            # INLINED (see #6 above); mirror this file's nuget job steps
-#       if: ${{ inputs.publish_nuget }}
+#     nuget:            # INLINED; mirror this file's publish-nuget job steps
+#       if: ${{ !github.event.repository.fork && inputs.publish_nuget }}
 #       runs-on: ubuntu-latest
 #       environment: release
 #       permissions: { contents: read, id-token: write }
 #       steps: [ checkout (ref=tag, fetch-depth:0), setup-dotnet (global.json),
 #                build+test, pack, NuGet/login@v1 (user: ${{ vars.NUGET_USER }}),
 #                dotnet nuget push --skip-duplicate ]
-#     npm:
-#       if: ${{ inputs.publish_npm }}
-#       uses: Vev-software/.github/.github/workflows/publish-dotnet-npm.yml@main
+#     npm:              # INLINED; mirror this file's publish-npm job steps
+#       if: ${{ !github.event.repository.fork && inputs.publish_npm }}
+#       runs-on: ubuntu-latest
+#       environment: release
 #       permissions: { contents: read, id-token: write }
-#       with:
-#         tag: ${{ inputs.tag }}
-#         ts_dir: sdk/typescript
-#         publish_nuget: false
-#         publish_npm: ${{ inputs.publish_npm }}
-#   Reference implementations: Vev-software/fabric#31, Vev-software/atlas-contracts#25.
+#       steps: [ checkout (ref=tag), setup-node (node 22, registry-url npmjs),
+#                update npm, npm version "${TAG#v}" + install + build,
+#                npm publish --access public ]
+#   Reference implementations: Vev-software/fabric#31, Vev-software/atlas-contracts#26.
 name: publish-dotnet-npm
 
 on:
