@@ -49,5 +49,6 @@ systems, never an opaque dependency. AGPL-3.0.
 **VEV Software ApS · Denmark**
 
 Engineering clarity. · Nordic by nature · European by values · Engineered to last.
+https://vev.software/
 
 _We weave the digital fabric of Europe._
